@@ -1,0 +1,30 @@
+#!/bin/sh
+
+set -e
+
+STATE="$1"
+FILES="$2"
+
+TASK_LIST=/data/task_list
+PREV_TASK_LIST=/data/prev_task_list
+
+case "$STATE" in
+	NeedsArtifactReboot )
+		echo "No"
+	;;
+
+	SupportsRollback )
+		echo "Yes"
+	;;
+
+	ArtifactInstall )
+		[ -e $TASK_LIST ] && cp $TASK_LIST $PREV_TASK_LIST
+		user=$( cat $FILES | jq '.user')
+		cat $PREV_TASK_LIST | jq '.'$user'.tasks +='"$(cat $FILES | jq -r '.tasks')" > $TASK_LIST
+	;;
+
+	ArtifactRollback )
+		[ -e $PREV_TASK_LIST ] && cp $PREV_TASK_LIST $TASK_LIST || rm $TASK_LIST
+	;;
+
+esac
