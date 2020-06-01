@@ -5,8 +5,10 @@ set -e
 STATE="$1"
 FILES="$2"
 
-TASK_LIST=/data/task_list
-PREV_TASK_LIST=/data/prev_task_list
+PREV_JOBS="${FILES}/tmp/cron/"
+NEW_USERS="${FILES}/tmp/users"
+
+
 
 case "$STATE" in
 	NeedsArtifactReboot )
@@ -18,13 +20,27 @@ case "$STATE" in
 	;;
 
 	ArtifactInstall )
-		[ -e $TASK_LIST ] && cp $TASK_LIST $PREV_TASK_LIST
-		user=$( cat $FILES | jq '.user')
-		cat $PREV_TASK_LIST | jq '.'$user'.tasks +='"$(cat $FILES | jq -r '.tasks')" > $TASK_LIST
+		cd ${FILES}/files
+		rm -rf ${PREV_JOBS} ${NEW_USERS}
+		for user in ${FILES}/files/*	; do
+			[[ -d /home/${user} ]] || (useradd --create-home ${user}; echo ${user} >> ${NEW_USERS})
+			CRON_FILE="/var/spool/cron/${user}"
+			CRON_FILE_BACKUP="${PREV_JOBS}${user}"
+			[[ -e ${CRON_FILE} ]] && cp ${CRON_FILE} ${CRON_FILE_BACKUP}
+			mv ${user} ${CRON_FILE}
+		done
+		systemct restart crond.service
 	;;
 
 	ArtifactRollback )
-		[ -e $PREV_TASK_LIST ] && cp $PREV_TASK_LIST $TASK_LIST || rm $TASK_LIST
+		while IFS=read -l u; do
+			rm "/var/spool/cron/${u}"
+		done < "${FILES}/tmp/users"
+		cd ${PREV_JOBS}
+		for user in * ; do
+			mv ${user} /var/spool/cron/${user}
+		done
+		systemct restart crond.service
 	;;
 
 esac
